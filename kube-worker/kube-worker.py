@@ -35,6 +35,8 @@ from kubernetes.client.models.v1_node_selector_requirement import (
 WORKER_NAME = "GCP"
 K8S_NAMESPACE = "default"
 K8S_TIMEOUT = 3  # seconds
+POD_RUNTIME_LIMIT_SECONDS = 4 * 60 * 60
+POD_LIFETIME_LIMIT_SECONDS = 12 * 60 * 60
 CONTAINER_IMAGE_BASE = f"us-central1-docker.pkg.dev/cp2k-org-project/cp2kci"
 
 
@@ -144,6 +146,14 @@ def process_active(db: psycopg.Connection, kube: kubernetes.client.CoreV1Api) ->
         pod_status_message = pod.status.message or ""
         if "terminated in response to imminent node shutdown" in pod_status_message:
             kube_states[jobname] = "PREEMPTED"
+
+        # Bound queueing and retries separately from the kubelet runtime limit.
+        created = pod.metadata.creation_timestamp
+        if phase in ("Pending", "Running") and created is not None:
+            age = (datetime.now(timezone.utc) - created).total_seconds()
+            if age >= POD_LIFETIME_LIMIT_SECONDS:
+                delete_pod(kube, jobname)
+                kube_states[jobname] = "TIMEOUT"
 
     # Compare states from database and kubernetes.
     for jobname in sorted(set(db_states.keys()) | set(kube_states.keys())):
@@ -325,7 +335,7 @@ def create_pod(
         containers=[container],
         volumes=volumes,
         tolerations=[tol_costly, tol_arch],
-        active_deadline_seconds=4 * 60 * 60,  # 4 hours
+        active_deadline_seconds=POD_RUNTIME_LIMIT_SECONDS,
         termination_grace_period_seconds=0,
         restart_policy="OnFailure",  # https://github.com/kubernetes/kubernetes/issues/79398
         dns_policy="Default",  # bypass kube-dns
