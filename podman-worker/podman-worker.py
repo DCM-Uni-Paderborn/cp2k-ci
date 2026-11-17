@@ -198,22 +198,22 @@ class Worker:
             if p.wait() == 0:
                 break
             else:
-                self.report(f"git fetch exited with code {p.returncode}")
-                sleep(10)
+                self.report(f"git fetch exited with code {p.returncode}\n")
+                sleep(30)
         else:
             return "CI_ERROR"
 
         # Checkout git commit.
         p = self.popen(["git", "checkout", job.spec["git_ref"]], report=False)
         if p.wait() != 0:
-            self.report(f"git checkout exited with code {p.returncode}")
+            self.report(f"git checkout exited with code {p.returncode}\n")
             return "CI_ERROR"
 
         # Report git commit metadata.
         git_log_format = "--pretty=%nCommitSHA: %H%nCommitTime: %ci%nCommitAuthor: %an%nCommitSubject: %s%n"
         p = self.popen(["git", "--no-pager", "log", "-1", git_log_format])
         if p.wait() != 0:
-            self.report(f"git log exited with code {p.returncode}")
+            self.report(f"git log exited with code {p.returncode}\n")
             return "CI_ERROR"
 
         podman_build_oom = str(Path(__file__).parent.resolve() / "podman_build_oom.sh")
@@ -277,7 +277,7 @@ class Worker:
             ["podman", "create", f"--name={container}", job.name], report=False
         )
         if p.wait() != 0:
-            self.report(f"podman create exited with code {p.returncode}")
+            self.report(f"podman create exited with code {p.returncode}\n")
             return "CI_ERROR"
 
         # Replay report from container when build appears to have been fully cached.
