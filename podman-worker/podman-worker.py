@@ -191,9 +191,16 @@ class Worker:
     # ----------------------------------------------------------------------------------
     def inner_run(self, job: Job) -> JobState:
         # Fetch git branch.
-        p = self.popen(["git", "fetch", "origin", job.spec["git_branch"]], report=False)
-        if p.wait() != 0:
-            self.report(f"git fetch exited with code {p.returncode}")
+        for i in range(3):
+            p = self.popen(
+                ["git", "fetch", "origin", job.spec["git_branch"]], report=False
+            )
+            if p.wait() == 0:
+                break
+            else:
+                self.report(f"git fetch exited with code {p.returncode}")
+                sleep(10)
+        else:
             return "CI_ERROR"
 
         # Checkout git commit.
